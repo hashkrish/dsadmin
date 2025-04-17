@@ -65,20 +65,44 @@ function QueryInput({
   initialQuery: string;
   onRunQuery: (q: string) => void;
 }) {
-  const [query, setQuery] = React.useState(initialQuery);
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [query, setQuery] = React.useState(() => {
+    const draftQuery = localStorage.getItem("draftQuery");
+    return draftQuery !== null ? draftQuery : initialQuery;
+  });
 
-  // Update query state when initialQuery changes
+  // Move cursor to end on initial load
   React.useEffect(() => {
-    setQuery(initialQuery);
+    if (textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.value.length;
+      textareaRef.current.selectionEnd = textareaRef.current.value.length;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    const draftQuery = localStorage.getItem("draftQuery");
+    if (draftQuery === null) {
+      setQuery(initialQuery);
+    }
   }, [initialQuery]);
 
   const updateQuery = React.useCallback((ev) => {
-    setQuery(ev.target.value);
+    const newQuery = ev.target.value;
+    setQuery(newQuery);
+    // Save draft query to localStorage as user types
+    if (newQuery.trim()) {
+      localStorage.setItem("draftQuery", newQuery);
+    } else {
+      // Remove draft if query is empty
+      localStorage.removeItem("draftQuery");
+    }
   }, []);
 
   const runQuery = React.useCallback(
     (ev) => {
       ev.preventDefault();
+      // Clear draft query when query is executed
+      localStorage.removeItem("draftQuery");
       onRunQuery(query);
     },
     [onRunQuery, query],
@@ -98,6 +122,7 @@ function QueryInput({
           </a>
         </label>
         <textarea
+          ref={textareaRef}
           autoFocus={true}
           className="form-control"
           rows={5}
