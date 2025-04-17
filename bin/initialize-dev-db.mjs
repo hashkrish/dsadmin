@@ -287,6 +287,27 @@ await call("commit", {
           partitionId: {
             projectId: projectID,
           },
+          path: [{ kind: "KindWithKeyProperty", name: "Entity" }],
+        },
+        properties: {
+          key: {
+            integerValue: 14,
+          },
+        },
+      },
+    },
+  ],
+});
+
+await call("commit", {
+  mode: "NON_TRANSACTIONAL",
+  mutations: [
+    {
+      insert: {
+        key: {
+          partitionId: {
+            projectId: projectID,
+          },
           path: [{ kind: "Kind", name: "EntityWithExternalKeyLink" }],
         },
         properties: {
@@ -418,6 +439,27 @@ await call("commit", {
         properties: {
           integerProp: {
             integerValue: 32,
+          },
+        },
+      },
+    },
+  ],
+});
+
+await call("commit", {
+  mode: "NON_TRANSACTIONAL",
+  mutations: [
+    {
+      insert: {
+        key: {
+          partitionId: {
+            projectId: projectID,
+          },
+          path: [{ kind: "Slash/Kind", name: "EntityWithSingleProperty" }],
+        },
+        properties: {
+          integerProp: {
+            integerValue: 14,
           },
         },
       },
