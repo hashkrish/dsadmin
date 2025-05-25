@@ -47,14 +47,14 @@ export function valueToString(
     return `lat: ${v.geoPointValue.latitude ?? 0}, lon: ${
       v.geoPointValue.longitude ?? 0
     }`;
-  } else if ("arrayValue" in v) {
-    return (
-      "[" +
-      (v.arrayValue.values || [])
-        .map((v) => valueToString(v, project, namespace))
-        .join(", ") +
-      "]"
-    );
+    // } else if ("arrayValue" in v) {
+    //   return JSON.stringify(
+    //     (v.arrayValue.values || []).map((v) =>
+    //       valueToString(v, project, namespace),
+    //     ),
+    //     null,
+    //     4,
+    //   );
   } else if ("blobValue" in v) {
     const blob = b64decode(v.blobValue);
     return isPrintable(blob) ? blob : `blob (${blob.length} bytes)`;

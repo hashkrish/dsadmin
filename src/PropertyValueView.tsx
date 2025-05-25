@@ -23,7 +23,7 @@ export function PropertyValueView({
       namespace,
     );
     if (isShort) {
-      text = truncate(text, { length: 20 });
+      text = truncate(text, { length: 50 });
     }
     return project === v.keyValue.partitionId.projectId ? (
       <Link
@@ -44,8 +44,16 @@ export function PropertyValueView({
         {valueToString(v, project, namespace)}
       </span>
     );
+  } else if ("arrayValue" in v) {
+    return (
+      <div>
+        {(v.arrayValue.values || []).map((v, i) => (
+          <div key={i} className="text-truncate">
+            {valueToString(v, project, namespace)}
+          </div>
+        ))}
+      </div>
+    );
   }
-  return (
-    <span className="text-nowrap">{valueToString(v, project, namespace)}</span>
-  );
+  return <span>{valueToString(v, project, namespace)}</span>;
 }

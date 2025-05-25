@@ -9,7 +9,11 @@ import QuestionCircle from "./ui/icons/question-circle";
 import useDocumentTitle from "./ui/useDocumentTitle";
 import TrashIcon from "./ui/icons/trash";
 
-function RecentQueries({ onSelectQuery }: { onSelectQuery: (query: string) => void }) {
+function RecentQueries({
+  onSelectQuery,
+}: {
+  onSelectQuery: (query: string) => void;
+}) {
   const [queries, setQueries] = React.useState<string[]>([]);
 
   React.useEffect(() => {
@@ -23,11 +27,14 @@ function RecentQueries({ onSelectQuery }: { onSelectQuery: (query: string) => vo
     }
   }, []);
 
-  const deleteQuery = React.useCallback((queryToDelete: string) => {
-    const updatedQueries = queries.filter(q => q !== queryToDelete);
-    setQueries(updatedQueries);
-    localStorage.setItem("queryHistory", JSON.stringify(updatedQueries));
-  }, [queries]);
+  const deleteQuery = React.useCallback(
+    (queryToDelete: string) => {
+      const updatedQueries = queries.filter((q) => q !== queryToDelete);
+      setQueries(updatedQueries);
+      localStorage.setItem("queryHistory", JSON.stringify(updatedQueries));
+    },
+    [queries],
+  );
 
   if (queries.length === 0) return null;
 
@@ -35,24 +42,30 @@ function RecentQueries({ onSelectQuery }: { onSelectQuery: (query: string) => vo
     <div className="mt-4">
       <h5>Recent Queries</h5>
       <ul className="list-group">
-        {queries.slice(-100).reverse().map((q, i) => (
-          <li key={i} className="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
-              style={{ cursor: 'pointer' }}>
-            <span onClick={() => onSelectQuery(q)} className="flex-grow-1">
-              {q}
-            </span>
-            <button 
-              className="btn btn-sm btn-outline-danger ms-2" 
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteQuery(q);
-              }}
-              title="Delete query"
+        {queries
+          .slice(-100)
+          .reverse()
+          .map((q, i) => (
+            <li
+              key={i}
+              className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+              style={{ cursor: "pointer" }}
             >
-              <TrashIcon className="bi" />
-            </button>
-          </li>
-        ))}
+              <span onClick={() => onSelectQuery(q)} className="flex-grow-1">
+                {q}
+              </span>
+              <button
+                className="btn btn-sm btn-outline-danger ms-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteQuery(q);
+                }}
+                title="Delete query"
+              >
+                <TrashIcon className="bi" />
+              </button>
+            </li>
+          ))}
       </ul>
     </div>
   );
@@ -139,7 +152,7 @@ function QueryInput({
 
 export default function QueryPage({ namespace }: { namespace: string | null }) {
   const q = qs.parse(window.location.search) as Record<string, string>;
-  const currentQuery = q.q || "";
+  const currentQuery = q.q || "select * from ";
 
   useDocumentTitle("Query");
   const [, setLocation] = useLocation();
@@ -160,16 +173,16 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
       } catch (e) {
         console.error("Failed to parse query history", e);
       }
-      
+
       // Remove duplicate if exists and add new query
-      queries = queries.filter(q => q !== currentQuery);
+      queries = queries.filter((q) => q !== currentQuery);
       queries.push(currentQuery);
-      
+
       // Keep only last 100 queries
       if (queries.length > 100) {
         queries = queries.slice(-100);
       }
-      
+
       localStorage.setItem("queryHistory", JSON.stringify(queries));
     }
   }, [queryResults, currentQuery]);

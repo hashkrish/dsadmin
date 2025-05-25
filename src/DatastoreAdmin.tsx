@@ -130,7 +130,7 @@ function DatastoreAdminView({ project }: { project: string }) {
           </ul>
         </div>
       </nav>
-      <div className="container mt-3 mb-3">
+      <div className="m-4">
         {isLoading ? <Loading /> : null}
         <Switch>
           <Route path="{/namespaces/:namespace}?/kinds/:kind">
