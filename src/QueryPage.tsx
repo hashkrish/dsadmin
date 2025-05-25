@@ -9,9 +9,39 @@ import QuestionCircle from "./ui/icons/question-circle";
 import useDocumentTitle from "./ui/useDocumentTitle";
 import TrashIcon from "./ui/icons/trash";
 
+function RecentQuery({
+  query,
+  onSelectQuery,
+  deleteQuery,
+}: {
+  query: string;
+  onSelectQuery: (query: string) => void;
+  deleteQuery: (query: string) => void;
+}) {
+  return (
+    <>
+      <span onClick={() => onSelectQuery(query)} className="flex-grow-1">
+        {query}
+      </span>
+      <button
+        className="btn btn-sm btn-outline-danger ms-2"
+        onClick={(e) => {
+          e.stopPropagation();
+          deleteQuery(query);
+        }}
+        title="Delete query"
+      >
+        <TrashIcon className="bi" />
+      </button>
+    </>
+  );
+}
+
 function RecentQueries({
+  query,
   onSelectQuery,
 }: {
+  query: string;
   onSelectQuery: (query: string) => void;
 }) {
   const [queries, setQueries] = React.useState<string[]>([]);
@@ -43,6 +73,7 @@ function RecentQueries({
       <h5>Recent Queries</h5>
       <ul className="list-group">
         {queries
+          .filter((q) => q.toLowerCase().startsWith(query.trim().toLowerCase()))
           .slice(-100)
           .reverse()
           .map((q, i) => (
@@ -51,19 +82,11 @@ function RecentQueries({
               className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
               style={{ cursor: "pointer" }}
             >
-              <span onClick={() => onSelectQuery(q)} className="flex-grow-1">
-                {q}
-              </span>
-              <button
-                className="btn btn-sm btn-outline-danger ms-2"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  deleteQuery(q);
-                }}
-                title="Delete query"
-              >
-                <TrashIcon className="bi" />
-              </button>
+              <RecentQuery
+                query={q}
+                onSelectQuery={onSelectQuery}
+                deleteQuery={deleteQuery}
+              />
             </li>
           ))}
       </ul>
@@ -72,17 +95,15 @@ function RecentQueries({
 }
 
 function QueryInput({
-  initialQuery,
+  query,
+  setQuery,
   onRunQuery,
 }: {
-  initialQuery: string;
+  query: string;
+  setQuery: (q: string) => void;
   onRunQuery: (q: string) => void;
 }) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const [query, setQuery] = React.useState(() => {
-    const draftQuery = localStorage.getItem("draftQuery");
-    return draftQuery !== null ? draftQuery : initialQuery;
-  });
 
   // Move cursor to end on initial load
   React.useEffect(() => {
@@ -91,13 +112,6 @@ function QueryInput({
       textareaRef.current.selectionEnd = textareaRef.current.value.length;
     }
   }, []);
-
-  React.useEffect(() => {
-    const draftQuery = localStorage.getItem("draftQuery");
-    if (draftQuery === null) {
-      setQuery(initialQuery);
-    }
-  }, [initialQuery]);
 
   const updateQuery = React.useCallback((ev) => {
     const newQuery = ev.target.value;
@@ -125,7 +139,7 @@ function QueryInput({
     <form className="mb-3">
       <div className="mb-3">
         <label className="form-label">
-          GQL Query
+          GQL Querys
           <a
             href="https://cloud.google.com/datastore/docs/reference/gql_reference#grammar"
             rel="noreferrer"
@@ -152,10 +166,15 @@ function QueryInput({
 
 export default function QueryPage({ namespace }: { namespace: string | null }) {
   const q = qs.parse(window.location.search) as Record<string, string>;
-  const currentQuery = q.q || "select * from ";
+  const currentQuery = q.q || "";
 
   useDocumentTitle("Query");
   const [, setLocation] = useLocation();
+
+  const [query, setQuery] = React.useState(() => {
+    const draftQuery = localStorage.getItem("draftQuery");
+    return draftQuery ? draftQuery : currentQuery;
+  });
 
   const {
     data: queryResults,
@@ -189,6 +208,7 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
 
   const runQuery = React.useCallback(
     (query: string) => {
+      setQuery(query);
       setLocation(
         window.location.pathname +
           "?" +
@@ -201,16 +221,23 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
     [q, setLocation],
   );
 
+  const onSelectQuery = React.useCallback(
+    (query: string) => {
+      setQuery(query);
+    },
+    [q, setLocation],
+  );
+
   return (
     <div>
-      <QueryInput initialQuery={currentQuery} onRunQuery={runQuery} />
+      <QueryInput query={query} setQuery={setQuery} onRunQuery={runQuery} />
       {error != null ? <ErrorMessage error={error} /> : null}
       {isLoading ? (
         <Loading />
       ) : queryResults != null ? (
         <EntitiesTable entities={queryResults} namespace={namespace} />
       ) : (
-        <RecentQueries onSelectQuery={runQuery} />
+        <RecentQueries query={query} onSelectQuery={onSelectQuery} />
       )}
     </div>
   );
