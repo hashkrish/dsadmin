@@ -2,7 +2,7 @@
   "name": "dsadmin",
   "version": "0.20.0",
   "scripts": {
-    "start": "concurrently -n db,js,srv yarn:start-emulator yarn:start-build yarn:start-server",
+    "start": "concurrently -n js,srv yarn:start-build yarn:start-server",
     "build": "./build.mjs",
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "lint": "prettier --loglevel warn --check \"src/**/*.{js,jsx,ts,tsx}\" && tsc --noEmit && eslint .",
@@ -11,7 +11,7 @@
     "test-coverage": "./build.mjs --test --coverage",
     "start-emulator": "gcloud --project=dsadmin-dev beta emulators datastore start --host-port=127.0.0.1:8081 --data-dir=emulator-data",
     "start-build": "./build.mjs --watch",
-    "start-server": "./bin/dsadmin.js --project=dsadmin-dev",
+    "start-server": "./bin/dsadmin.js --project=test",
     "initialize-dev-db": "./bin/initialize-dev-db.mjs",
     "prepare": "./build.mjs"
   },
@@ -60,28 +60,14 @@
     "typescript": "^4.3.5",
     "wouter": "^2.7.4"
   },
-  "files": [
-    "public",
-    "bin/dsadmin.js"
-  ],
+  "files": ["public", "bin/dsadmin.js"],
   "bin": "./bin/dsadmin.js",
   "license": "MIT",
-  "keywords": [
-    "google",
-    "cloud",
-    "datastore",
-    "emulator",
-    "gui"
-  ],
+  "keywords": ["google", "cloud", "datastore", "emulator", "gui"],
   "nyc": {
     "all": true,
-    "reporter": [
-      "text",
-      "html"
-    ],
-    "include": [
-      ".esbuild-test/**"
-    ],
+    "reporter": ["text", "html"],
+    "include": [".esbuild-test/**"],
     "exclude": [],
     "excludeAfterRemap": false
   },
@@ -104,11 +90,7 @@
       },
       "sourceType": "module"
     },
-    "plugins": [
-      "prettier",
-      "react",
-      "@typescript-eslint"
-    ],
+    "plugins": ["prettier", "react", "@typescript-eslint"],
     "settings": {
       "react": {
         "version": "detect"
@@ -122,10 +104,7 @@
       "react/display-name": 0,
       "react/prop-types": 0
     },
-    "ignorePatterns": [
-      "public/dist",
-      "babel.config.js"
-    ]
+    "ignorePatterns": ["public/dist", "babel.config.js"]
   },
   "prettier": {
     "trailingComma": "all"

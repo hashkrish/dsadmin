@@ -144,7 +144,7 @@ function DatastoreAdminView({ project }: { project: string }) {
                   kind={decodedKind}
                   page={page == null ? 0 : parseInt(page, 10) || 0}
                   pageSize={
-                    pageSize == null ? 50 : parseInt(pageSize, 10) || 50
+                    pageSize == null ? 200 : parseInt(pageSize, 10) || 200
                   }
                   namespace={namespace ?? null}
                 />

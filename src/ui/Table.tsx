@@ -33,7 +33,7 @@ export default function Table({
   havePrevious,
   wrapperClassName,
   page,
-  pageSize = 50,
+  pageSize = 200,
   onChangePageSize,
 }: {
   className?: string;

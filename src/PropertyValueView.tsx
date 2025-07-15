@@ -38,8 +38,8 @@ export function PropertyValueView({
   } else if ("stringValue" in v || "blobValue" in v) {
     return (
       <span
-        className="d-inline-block text-truncate"
-        style={{ maxWidth: "10em" }}
+        className="d-inline-block"
+        style={{ maxWidth: "10em", overflowWrap: "break-word" }}
       >
         {valueToString(v, project, namespace)}
       </span>
