@@ -53,11 +53,16 @@ function KindSelector({
           value={value}
           onChange={onLocationChange}
         >
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
+          {kinds
+            .slice() // avoid mutating original
+            .sort((a, b) =>
+              a.localeCompare(b, undefined, { sensitivity: "base" }),
+            )
+            .map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
         </select>
       </div>
     </div>

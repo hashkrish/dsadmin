@@ -16,8 +16,14 @@ export default function HomePage({ namespace }: { namespace: string | null }) {
     if (kinds == null || kinds.length === 0) {
       return;
     }
+    const sortedKinds = kinds
+      .slice()
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
     setLocation(
-      namespacedLocation(`/kinds/${encodeURIComponent(kinds[0])}`, namespace),
+      namespacedLocation(
+        `/kinds/${encodeURIComponent(sortedKinds[0])}`,
+        namespace,
+      ),
       {
         replace: true,
       },
