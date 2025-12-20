@@ -7,6 +7,10 @@ all: build-js bin
 bin:
 	go build -o bin/ ./cmd/...
 
+.PHONY: bin-darwin
+bin-darwin:
+	GOOS=darwin GOARCH=arm64 go build -o bin/darwin-arm64/ ./cmd/...
+
 .PHONY: build-js
 build-js:
 	yarnpkg run build

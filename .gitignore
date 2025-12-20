@@ -6,6 +6,7 @@ emulator-data
 yarn-error.log
 bin/dsadmin
 bin/dsadmin-*
+bin/darwin-*
 coverage/
 /.esbuild-test
 /.nyc_output
