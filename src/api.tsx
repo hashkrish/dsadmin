@@ -72,18 +72,18 @@ export type PropertyValue = {
   excludeFromIndexes?: boolean;
   meaning?: number;
 } & (
-  | NullPropertyValue
-  | BooleanPropertyValue
-  | IntegerValue
-  | DoubleValue
-  | TimestampPropertyValue
-  | KeyPropertyValue
-  | StringPropertyValue
-  | BlobValue
-  | GeoPointValue
-  | ArrayValue
-  | EntityValue
-);
+    | NullPropertyValue
+    | BooleanPropertyValue
+    | IntegerValue
+    | DoubleValue
+    | TimestampPropertyValue
+    | KeyPropertyValue
+    | StringPropertyValue
+    | BlobValue
+    | GeoPointValue
+    | ArrayValue
+    | EntityValue
+  );
 
 export type Entity = {
   key: Key;
@@ -241,15 +241,15 @@ export function useEntities(
             ...(order == null
               ? {}
               : {
-                  order: [
-                    {
-                      property: {
-                        name: order.property,
-                      },
-                      direction: order.direction,
+                order: [
+                  {
+                    property: {
+                      name: order.property,
                     },
-                  ],
-                }),
+                    direction: order.direction,
+                  },
+                ],
+              }),
             ...(startCursor != null ? { startCursor } : {}),
           },
         });
@@ -265,6 +265,31 @@ export function useEntities(
       return result;
     },
     { keepPreviousData: true, staleTime: 3600 * 1000, enabled: kind != null },
+  );
+}
+
+export function useLookupEntities(keys: Key[]) {
+  const { project } = React.useContext(APIContext)!;
+  // Memoize the key string to avoid re-fetching on every render if keys array reference changes but content is same
+  const keyString = React.useMemo(() => JSON.stringify(keys), [keys]);
+
+  return useQuery<Entity[], Error>(
+    ["entities", "batch", keyString],
+    async () => {
+      if (keys.length === 0) return [];
+      // Dedup keys
+      const uniqueKeys = keys.filter(
+        (k, i, self) =>
+          self.findIndex((s) => JSON.stringify(s) === JSON.stringify(k)) === i
+      );
+      if (uniqueKeys.length === 0) return [];
+
+      // Chunk keys if necessary (Datastore limit is usually 1000, but safer to respect practical limits)
+      // Here just call lookup
+      const r = await lookup(project, { keys: uniqueKeys });
+      return (r.found || []).map((f: any) => f.entity);
+    },
+    { enabled: keys.length > 0, staleTime: 300 * 1000 }
   );
 }
 
