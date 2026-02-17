@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "react-query";
 import { ReactQueryDevtools } from "react-query/devtools";
 import classNames from "classnames";
 import QueryPage from "./QueryPage";
+import QueryBuilderPage from "./QueryBuilderPage";
 import KindPage from "./KindPage";
 import EntityPage from "./EntityPage";
 import HomePage from "./HomePage";
@@ -63,6 +64,7 @@ function DatastoreAdminView({ project }: { project: string }) {
   );
 
   const [isQueryRoute] = useRoute("{/namespaces/:namespace}?/query");
+  const [isBuilderRoute] = useRoute("{/namespaces/:namespace}?/query-builder");
 
   const isLoading = isExportLoading ?? isImportLoading;
 
@@ -85,7 +87,10 @@ function DatastoreAdminView({ project }: { project: string }) {
           <ul className="navbar-nav ms-auto me-auto">
             <li className="nav-item">
               <Link
-                className={classNames("nav-link", !isQueryRoute && "active")}
+                className={classNames(
+                  "nav-link",
+                  !isQueryRoute && !isBuilderRoute && "active",
+                )}
                 href={namespacedLocation("/", namespace)}
               >
                 Browse
@@ -97,6 +102,14 @@ function DatastoreAdminView({ project }: { project: string }) {
                 href={namespacedLocation("/query", namespace)}
               >
                 Query
+              </Link>
+            </li>
+            <li className="nav-item">
+              <Link
+                className={classNames("nav-link", isBuilderRoute && "active")}
+                href={namespacedLocation("/query-builder", namespace)}
+              >
+                Query Builder
               </Link>
             </li>
             <li className="nav-item">
@@ -153,6 +166,9 @@ function DatastoreAdminView({ project }: { project: string }) {
           </Route>
           <Route path="{/namespaces/:namespace}?/query">
             {({ namespace }) => <QueryPage namespace={namespace ?? null} />}
+          </Route>
+          <Route path="{/namespaces/:namespace}?/query-builder">
+            {({ namespace }) => <QueryBuilderPage namespace={namespace ?? null} />}
           </Route>
           <Route path="/entities/:entityKey">
             {({ entityKey }) => <EntityPage entityKey={entityKey} />}

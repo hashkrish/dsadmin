@@ -143,6 +143,25 @@ type ExportResponse = {
   };
 };
 
+export type KindFields = {
+  allFields: string[];
+  numericFields: string[];
+  fieldTypes: Record<string, PropertyType[]>;
+};
+
+export type PropertyType =
+  | "null"
+  | "boolean"
+  | "integer"
+  | "double"
+  | "timestamp"
+  | "key"
+  | "string"
+  | "blob"
+  | "geoPoint"
+  | "array"
+  | "entity";
+
 const APIContext = React.createContext<{ project: string } | null>(null);
 
 export function APIProvider({
@@ -211,6 +230,24 @@ function partitionID(namespace: string | null) {
   return namespace == null ? {} : { partitionId: { namespaceId: namespace } };
 }
 
+function isNumericProperty(value: PropertyValue) {
+  return "integerValue" in value || "doubleValue" in value;
+}
+
+function propertyType(value: PropertyValue): PropertyType {
+  if ("nullValue" in value) return "null";
+  if ("booleanValue" in value) return "boolean";
+  if ("integerValue" in value) return "integer";
+  if ("doubleValue" in value) return "double";
+  if ("timestampValue" in value) return "timestamp";
+  if ("keyValue" in value) return "key";
+  if ("stringValue" in value) return "string";
+  if ("blobValue" in value) return "blob";
+  if ("geoPointValue" in value) return "geoPoint";
+  if ("arrayValue" in value) return "array";
+  return "entity";
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////
 // React-Query wrappers
 ////////////////////////////////////////////////////////////////////////////////////////////
@@ -248,6 +285,55 @@ export function useKinds(namespace: string | null) {
         (e) => e.entity.key.path[0].name,
       );
     },
+  );
+}
+
+export function useKindFields(kind: string | null, namespace: string | null) {
+  const { project } = React.useContext(APIContext)!;
+  return useQuery<KindFields, Error>(
+    ["namespaces", namespace, "kinds", kind, "fields"],
+    async () => {
+      if (kind == null) {
+        return { allFields: [], numericFields: [], fieldTypes: {} };
+      }
+      const r = await runQuery(project, {
+        ...partitionID(namespace),
+        query: {
+          kind: [{ name: kind }],
+          limit: 200,
+        },
+      });
+
+      const fields = new Set<string>();
+      const numericFields = new Set<string>();
+      const fieldTypes = new Map<string, Set<PropertyType>>();
+      const entities = (r.batch.entityResults || []).map((e) => e.entity);
+
+      for (const entity of entities) {
+        for (const [fieldName, fieldValue] of Object.entries(entity.properties || {})) {
+          fields.add(fieldName);
+          if (isNumericProperty(fieldValue)) {
+            numericFields.add(fieldName);
+          }
+          const typesForField = fieldTypes.get(fieldName) || new Set<PropertyType>();
+          typesForField.add(propertyType(fieldValue));
+          fieldTypes.set(fieldName, typesForField);
+        }
+      }
+
+      const fieldTypesObject = Object.fromEntries(
+        Array.from(fieldTypes.entries())
+          .map(([fieldName, types]) => [fieldName, Array.from(types).sort()])
+          .sort(([a], [b]) => a.localeCompare(b)),
+      ) as Record<string, PropertyType[]>;
+
+      return {
+        allFields: Array.from(fields).sort((a, b) => a.localeCompare(b)),
+        numericFields: Array.from(numericFields).sort((a, b) => a.localeCompare(b)),
+        fieldTypes: fieldTypesObject,
+      };
+    },
+    { enabled: kind != null },
   );
 }
 
@@ -369,6 +455,46 @@ export function useGQLQuery(query: string, namespace: string | null) {
       return (r.batch.entityResults || []).map((e) => e.entity);
     },
     { enabled: query !== "" },
+  );
+}
+
+export function useGQLQueries(queries: string[], namespace: string | null) {
+  const { project } = React.useContext(APIContext)!;
+  const queryKey = React.useMemo(() => queries.join("\n"), [queries]);
+  return useQuery<Entity[], Error>(
+    ["namespaces", namespace, "multi-queries", queryKey],
+    async () => {
+      if (queries.length === 0) {
+        return [];
+      }
+      const responses = await Promise.all(
+        queries.map((query) =>
+          runQuery(project, {
+            ...partitionID(namespace),
+            gqlQuery: {
+              queryString: query,
+              allowLiterals: true,
+            },
+          }),
+        ),
+      );
+
+      const merged: Entity[] = [];
+      const seen = new Set<string>();
+      for (const response of responses) {
+        const entities = (response.batch.entityResults || []).map((e) => e.entity);
+        for (const entity of entities) {
+          const keyHash = JSON.stringify(entity.key);
+          if (seen.has(keyHash)) {
+            continue;
+          }
+          seen.add(keyHash);
+          merged.push(entity);
+        }
+      }
+      return merged;
+    },
+    { enabled: queries.length > 0 },
   );
 }
 
