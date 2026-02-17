@@ -45,6 +45,31 @@ type WhereClause = {
   valueType: ValueType;
 };
 
+type QueryBuilderState = {
+  kind: string;
+  whereClauses: WhereClause[];
+  orderField: string;
+  orderDirection: SortDirection;
+  aggregation: Aggregation;
+  aggregationField: string;
+  builtQueries: string[];
+};
+
+const queryBuilderStateStorageKeyPrefix = "queryBuilderState";
+
+function loadQueryBuilderState(storageKey: string): QueryBuilderState | null {
+  const stored = localStorage.getItem(storageKey);
+  if (stored == null) {
+    return null;
+  }
+  try {
+    return JSON.parse(stored) as QueryBuilderState;
+  } catch (e) {
+    console.error("Failed to parse query builder state", e);
+    return null;
+  }
+}
+
 function escapeString(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
@@ -300,14 +325,35 @@ const allValueTypes: ValueType[] = [
 export default function QueryBuilderPage({ namespace }: { namespace: string | null }) {
   useDocumentTitle("Query Builder");
 
+  const storageKey = React.useMemo(
+    () => `${queryBuilderStateStorageKeyPrefix}:${namespace ?? "__default__"}`,
+    [namespace],
+  );
+  const persistedState = React.useMemo(
+    () => loadQueryBuilderState(storageKey),
+    [storageKey],
+  );
+
   const { data: kinds, error: kindsError, isLoading: kindsLoading } = useKinds(namespace);
-  const [kind, setKind] = React.useState("");
-  const [whereClauses, setWhereClauses] = React.useState<WhereClause[]>([]);
-  const [orderField, setOrderField] = React.useState("");
-  const [orderDirection, setOrderDirection] = React.useState<SortDirection>("ASC");
-  const [aggregation, setAggregation] = React.useState<Aggregation>("none");
-  const [aggregationField, setAggregationField] = React.useState("");
-  const [builtQueries, setBuiltQueries] = React.useState<string[]>([]);
+  const [kind, setKind] = React.useState(persistedState?.kind || "");
+  const [whereClauses, setWhereClauses] = React.useState<WhereClause[]>(
+    persistedState?.whereClauses || [],
+  );
+  const [orderField, setOrderField] = React.useState(
+    persistedState?.orderField || "",
+  );
+  const [orderDirection, setOrderDirection] = React.useState<SortDirection>(
+    persistedState?.orderDirection || "ASC",
+  );
+  const [aggregation, setAggregation] = React.useState<Aggregation>(
+    persistedState?.aggregation || "none",
+  );
+  const [aggregationField, setAggregationField] = React.useState(
+    persistedState?.aggregationField || "",
+  );
+  const [builtQueries, setBuiltQueries] = React.useState<string[]>(
+    persistedState?.builtQueries || [],
+  );
   const [queryError, setQueryError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -315,6 +361,49 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
       setKind(kinds[0]);
     }
   }, [kinds, kind]);
+
+  React.useEffect(() => {
+    const nextPersistedState = loadQueryBuilderState(storageKey);
+    if (nextPersistedState == null) {
+      setKind("");
+      setWhereClauses([]);
+      setOrderField("");
+      setOrderDirection("ASC");
+      setAggregation("none");
+      setAggregationField("");
+      setBuiltQueries([]);
+      return;
+    }
+    setKind(nextPersistedState.kind || "");
+    setWhereClauses(nextPersistedState.whereClauses || []);
+    setOrderField(nextPersistedState.orderField || "");
+    setOrderDirection(nextPersistedState.orderDirection || "ASC");
+    setAggregation(nextPersistedState.aggregation || "none");
+    setAggregationField(nextPersistedState.aggregationField || "");
+    setBuiltQueries(nextPersistedState.builtQueries || []);
+  }, [storageKey]);
+
+  React.useEffect(() => {
+    const state: QueryBuilderState = {
+      kind,
+      whereClauses,
+      orderField,
+      orderDirection,
+      aggregation,
+      aggregationField,
+      builtQueries,
+    };
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  }, [
+    storageKey,
+    kind,
+    whereClauses,
+    orderField,
+    orderDirection,
+    aggregation,
+    aggregationField,
+    builtQueries,
+  ]);
 
   const {
     data: fields,
