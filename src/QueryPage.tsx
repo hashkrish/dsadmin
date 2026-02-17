@@ -12,6 +12,73 @@ import ChevronDown from "./ui/icons/chevron-compact-down";
 import ChevronUp from "./ui/icons/chevron-compact-up";
 import { keyToString } from "./keys";
 
+const DRAFT_QUERY_STORAGE_KEY = "draftQuery";
+const QUERY_HISTORY_STORAGE_KEY = "queryHistory";
+const MAX_QUERY_HISTORY = 100;
+
+function readQueryHistory(): string[] {
+  const stored = localStorage.getItem(QUERY_HISTORY_STORAGE_KEY);
+  if (stored == null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error("Failed to parse query history", e);
+    return [];
+  }
+}
+
+function writeQueryHistory(queries: string[]) {
+  localStorage.setItem(QUERY_HISTORY_STORAGE_KEY, JSON.stringify(queries));
+}
+
+function parseJoinProperties(joinProperty: string) {
+  return joinProperty
+    .split(",")
+    .map((property) => property.trim())
+    .filter((property) => property.length > 0);
+}
+
+function useQueryHistory() {
+  const [queries, setQueries] = React.useState<string[]>([]);
+
+  React.useEffect(() => {
+    setQueries(readQueryHistory());
+  }, []);
+
+  const deleteQuery = React.useCallback((queryToDelete: string) => {
+    setQueries((previousQueries) => {
+      const updatedQueries = previousQueries.filter((q) => q !== queryToDelete);
+      writeQueryHistory(updatedQueries);
+      return updatedQueries;
+    });
+  }, []);
+
+  const storeQuery = React.useCallback((queryToStore: string) => {
+    if (queryToStore.trim() === "") {
+      return;
+    }
+    setQueries((previousQueries) => {
+      const nextQueries = previousQueries.filter((q) => q !== queryToStore);
+      nextQueries.push(queryToStore);
+      const compactQueries =
+        nextQueries.length > MAX_QUERY_HISTORY
+          ? nextQueries.slice(-MAX_QUERY_HISTORY)
+          : nextQueries;
+      writeQueryHistory(compactQueries);
+      return compactQueries;
+    });
+  }, []);
+
+  return {
+    queries,
+    deleteQuery,
+    storeQuery,
+  };
+}
+
 function RecentQuery({
   query,
   onSelectQuery,
@@ -27,6 +94,7 @@ function RecentQuery({
         {query}
       </span>
       <button
+        type="button"
         className="btn btn-sm btn-outline-danger ms-2"
         onClick={(e) => {
           e.stopPropagation();
@@ -43,32 +111,14 @@ function RecentQuery({
 function RecentQueries({
   query,
   onSelectQuery,
+  queries,
+  deleteQuery,
 }: {
   query: string;
   onSelectQuery: (query: string) => void;
+  queries: string[];
+  deleteQuery: (query: string) => void;
 }) {
-  const [queries, setQueries] = React.useState<string[]>([]);
-
-  React.useEffect(() => {
-    const stored = localStorage.getItem("queryHistory");
-    if (stored) {
-      try {
-        setQueries(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse query history", e);
-      }
-    }
-  }, []);
-
-  const deleteQuery = React.useCallback(
-    (queryToDelete: string) => {
-      const updatedQueries = queries.filter((q) => q !== queryToDelete);
-      setQueries(updatedQueries);
-      localStorage.setItem("queryHistory", JSON.stringify(updatedQueries));
-    },
-    [queries],
-  );
-
   if (queries.length === 0) return null;
 
   return (
@@ -81,7 +131,7 @@ function RecentQueries({
           .reverse()
           .map((q, i) => (
             <li
-              key={i}
+              key={`${q}-${i}`}
               className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
               style={{ cursor: "pointer" }}
             >
@@ -160,23 +210,25 @@ function QueryInput({
     }
   }, []);
 
-  const updateQuery = React.useCallback((ev) => {
-    const newQuery = ev.target.value;
-    setQuery(newQuery);
-    // Save draft query to localStorage as user types
-    if (newQuery.trim()) {
-      localStorage.setItem("draftQuery", newQuery);
-    } else {
-      // Remove draft if query is empty
-      localStorage.removeItem("draftQuery");
-    }
-  }, []);
+  const updateQuery = React.useCallback(
+    (ev: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const newQuery = ev.target.value;
+      setQuery(newQuery);
+      // Save draft query to localStorage as user types.
+      if (newQuery.trim()) {
+        localStorage.setItem(DRAFT_QUERY_STORAGE_KEY, newQuery);
+      } else {
+        localStorage.removeItem(DRAFT_QUERY_STORAGE_KEY);
+      }
+    },
+    [setQuery],
+  );
 
   const runQuery = React.useCallback(
-    (ev) => {
+    (ev: React.MouseEvent<HTMLButtonElement>) => {
       ev.preventDefault();
       // Clear draft query when query is executed
-      localStorage.removeItem("draftQuery");
+      localStorage.removeItem(DRAFT_QUERY_STORAGE_KEY);
       onRunQuery(query);
     },
     [onRunQuery, query],
@@ -222,13 +274,18 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
   useDocumentTitle("Query");
   const [, setLocation] = useLocation();
   const project = useProject();
+  const { queries, deleteQuery, storeQuery } = useQueryHistory();
 
   const [query, setQuery] = React.useState(() => {
-    const draftQuery = localStorage.getItem("draftQuery");
+    const draftQuery = localStorage.getItem(DRAFT_QUERY_STORAGE_KEY);
     return draftQuery ? draftQuery : currentQuery;
   });
 
   const [joinProperty, setJoinProperty] = React.useState(currentJoinProperty);
+  const joinProperties = React.useMemo(
+    () => parseJoinProperties(joinProperty),
+    [joinProperty],
+  );
 
   const {
     data: queryResults,
@@ -238,44 +295,41 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
 
   // Calculate keys to join
   const keysToJoin = React.useMemo(() => {
-    if (!queryResults || !joinProperty) return [];
+    if (!queryResults || joinProperties.length === 0) return [];
     const keys: Key[] = [];
-    const properties = joinProperty.split(",").map(p => p.trim()).filter(p => p);
 
     for (const e of queryResults) {
-      for (const prop of properties) {
+      for (const prop of joinProperties) {
         const val = e.properties?.[prop];
-        if (val && 'keyValue' in val) {
+        if (val && "keyValue" in val) {
           keys.push(val.keyValue);
         }
       }
     }
     return keys;
-  }, [queryResults, joinProperty]);
+  }, [queryResults, joinProperties]);
 
   const { data: joinedEntities, isLoading: isJoining } = useLookupEntities(keysToJoin);
 
   // Merge results
   const finalEntities = React.useMemo(() => {
     if (!queryResults) return [];
-    if (!joinProperty || !joinedEntities) return queryResults;
+    if (joinProperties.length === 0 || !joinedEntities) return queryResults;
 
-    const entityMap = new Map();
-    joinedEntities.forEach(e => {
+    const entityMap = new Map<string, Entity>();
+    joinedEntities.forEach((e) => {
       // Use keyToString for stable key hash
       const kStr = keyToString(e.key, project, namespace);
       entityMap.set(kStr, e);
     });
 
-    const properties = joinProperty.split(",").map(p => p.trim()).filter(p => p);
-
-    return queryResults.map(e => {
-      let newProperties = { ...e.properties };
+    return queryResults.map((e) => {
+      const newProperties = { ...e.properties };
       let modified = false;
 
-      for (const prop of properties) {
+      for (const prop of joinProperties) {
         const val = e.properties?.[prop];
-        if (val && 'keyValue' in val) {
+        if (val && "keyValue" in val) {
           const kStr = keyToString(val.keyValue, project, namespace);
           const joined = entityMap.get(kStr);
           if (joined) {
@@ -292,32 +346,14 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
       }
       return e;
     });
-  }, [queryResults, joinedEntities, joinProperty, project, namespace]);
-
+  }, [queryResults, joinedEntities, joinProperties, project, namespace]);
 
   // Store query in history when results are successfully received
   React.useEffect(() => {
     if (queryResults && currentQuery.trim()) {
-      const stored = localStorage.getItem("queryHistory");
-      let queries: string[] = [];
-      try {
-        queries = stored ? JSON.parse(stored) : [];
-      } catch (e) {
-        console.error("Failed to parse query history", e);
-      }
-
-      // Remove duplicate if exists and add new query
-      queries = queries.filter((q) => q !== currentQuery);
-      queries.push(currentQuery);
-
-      // Keep only last 100 queries
-      if (queries.length > 100) {
-        queries = queries.slice(-100);
-      }
-
-      localStorage.setItem("queryHistory", JSON.stringify(queries));
+      storeQuery(currentQuery);
     }
-  }, [queryResults, currentQuery]);
+  }, [queryResults, currentQuery, storeQuery]);
 
   const runQuery = React.useCallback(
     (newQuery: string) => {
@@ -336,10 +372,10 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
   );
 
   const onSelectQuery = React.useCallback(
-    (query: string) => {
-      setQuery(query);
+    (selectedQuery: string) => {
+      setQuery(selectedQuery);
     },
-    [q, setLocation],
+    [setQuery],
   );
 
   return (
@@ -360,7 +396,12 @@ export default function QueryPage({ namespace }: { namespace: string | null }) {
           <EntitiesTable entities={finalEntities} namespace={namespace} />
         </>
       ) : (
-        <RecentQueries query={query} onSelectQuery={onSelectQuery} />
+        <RecentQueries
+          query={query}
+          queries={queries}
+          onSelectQuery={onSelectQuery}
+          deleteQuery={deleteQuery}
+        />
       )}
     </div>
   );
