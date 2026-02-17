@@ -90,6 +90,59 @@ export type Entity = {
   properties?: Record<string, PropertyValue>;
 };
 
+type DatastoreBatch = {
+  entityResults?: Array<{ entity: Entity }>;
+  moreResults?: string;
+  skippedResults?: number;
+  endCursor?: string;
+};
+
+type RunQueryRequest = {
+  partitionId?: {
+    namespaceId: string;
+  };
+  query?: Record<string, unknown>;
+  gqlQuery?: {
+    queryString: string;
+    allowLiterals: boolean;
+  };
+};
+
+type RunQueryResponse = {
+  batch: DatastoreBatch;
+};
+
+type LookupRequest = {
+  keys: Key[];
+};
+
+type LookupResponse = {
+  found?: Array<{ entity: Entity }>;
+};
+
+type CommitRequest = {
+  mode: "NON_TRANSACTIONAL";
+  mutations: Array<{ update: Entity } | { insert: Entity } | { delete: Key }>;
+};
+
+type CommitResponse = {
+  mutationResults: Array<{ key: Key }>;
+};
+
+type ImportRequest = {
+  input_url: string;
+};
+
+type ExportRequest = {
+  output_url_prefix: string;
+};
+
+type ExportResponse = {
+  response: {
+    outputUrl: string;
+  };
+};
+
 const APIContext = React.createContext<{ project: string } | null>(null);
 
 export function APIProvider({
@@ -114,7 +167,7 @@ export function useProject() {
 // https://cloud.google.com/datastore/docs/reference/data/rest
 ////////////////////////////////////////////////////////////////////////////////////////////
 
-const basePath = (window as any).DSADMIN_ENV.BASE_PATH as string;
+const basePath = window.DSADMIN_ENV.BASE_PATH;
 
 async function callAPI<REQUEST_TYPE, RESPONSE_TYPE>(
   project: string,
@@ -134,24 +187,24 @@ async function callAPI<REQUEST_TYPE, RESPONSE_TYPE>(
   return r.json() as Promise<RESPONSE_TYPE>;
 }
 
-async function runQuery(project: string, query: any) {
-  return callAPI<any, any>(project, "runQuery", query);
+async function runQuery(project: string, query: RunQueryRequest) {
+  return callAPI<RunQueryRequest, RunQueryResponse>(project, "runQuery", query);
 }
 
-async function lookup(project: string, req: any) {
-  return callAPI<any, any>(project, "lookup", req);
+async function lookup(project: string, req: LookupRequest) {
+  return callAPI<LookupRequest, LookupResponse>(project, "lookup", req);
 }
 
-async function commit(project: string, req: any) {
-  return callAPI<any, any>(project, "commit", req);
+async function commit(project: string, req: CommitRequest) {
+  return callAPI<CommitRequest, CommitResponse>(project, "commit", req);
 }
 
-async function import_(project: string, req: any) {
-  return callAPI<any, any>(project, "import", req);
+async function import_(project: string, req: ImportRequest) {
+  return callAPI<ImportRequest, unknown>(project, "import", req);
 }
 
-async function export_(project: string, req: any) {
-  return callAPI<any, any>(project, "export", req);
+async function export_(project: string, req: ExportRequest) {
+  return callAPI<ExportRequest, ExportResponse>(project, "export", req);
 }
 
 function partitionID(namespace: string | null) {
@@ -171,7 +224,7 @@ export function useNamespaces() {
       },
     });
     const namespaces = (r.batch.entityResults || []).map(
-      (e: any) => e.entity.key.path[0].name || null,
+      (e) => e.entity.key.path[0].name || null,
     );
     if (namespaces.length === 0) {
       namespaces.push(null);
@@ -192,7 +245,7 @@ export function useKinds(namespace: string | null) {
         },
       });
       return (r.batch.entityResults || []).map(
-        (e: any) => e.entity.key.path[0].name,
+        (e) => e.entity.key.path[0].name,
       );
     },
   );
@@ -232,7 +285,7 @@ export function useEntities(
       let startCursor = null;
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const r: any = await runQuery(project, {
+        const r = await runQuery(project, {
           ...partitionID(namespace),
           query: {
             kind: [{ name: kind }],
@@ -254,11 +307,11 @@ export function useEntities(
           },
         });
         const batchResults = r.batch.entityResults || [];
-        result.push(...batchResults.map((e: any) => e.entity));
+        result.push(...batchResults.map((e) => e.entity));
         if (r.batch.moreResults !== "NOT_FINISHED") {
           break;
         }
-        offset = offset - r.batch.skippedResults;
+        offset = offset - (r.batch.skippedResults || 0);
         limit = limit - batchResults.length;
         startCursor = r.batch.endCursor;
       }
@@ -272,24 +325,32 @@ export function useLookupEntities(keys: Key[]) {
   const { project } = React.useContext(APIContext)!;
   // Memoize the key string to avoid re-fetching on every render if keys array reference changes but content is same
   const keyString = React.useMemo(() => JSON.stringify(keys), [keys]);
+  const uniqueKeys = React.useMemo(() => {
+    const seen = new Set<string>();
+    const deduped: Key[] = [];
+    for (const key of keys) {
+      const hash = JSON.stringify(key);
+      if (seen.has(hash)) {
+        continue;
+      }
+      seen.add(hash);
+      deduped.push(key);
+    }
+    return deduped;
+  }, [keyString]);
 
   return useQuery<Entity[], Error>(
     ["entities", "batch", keyString],
     async () => {
       if (keys.length === 0) return [];
-      // Dedup keys
-      const uniqueKeys = keys.filter(
-        (k, i, self) =>
-          self.findIndex((s) => JSON.stringify(s) === JSON.stringify(k)) === i
-      );
       if (uniqueKeys.length === 0) return [];
 
       // Chunk keys if necessary (Datastore limit is usually 1000, but safer to respect practical limits)
       // Here just call lookup
       const r = await lookup(project, { keys: uniqueKeys });
-      return (r.found || []).map((f: any) => f.entity);
+      return (r.found || []).map((f) => f.entity);
     },
-    { enabled: keys.length > 0, staleTime: 300 * 1000 }
+    { enabled: keys.length > 0, staleTime: 300 * 1000 },
   );
 }
 
@@ -305,7 +366,7 @@ export function useGQLQuery(query: string, namespace: string | null) {
           allowLiterals: true,
         },
       });
-      return (r.batch.entityResults || []).map((e: any) => e.entity);
+      return (r.batch.entityResults || []).map((e) => e.entity);
     },
     { enabled: query !== "" },
   );
