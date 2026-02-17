@@ -542,6 +542,12 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
                   }
                   value={clause.value}
                   onChange={(e) => updateWhereClause(clause.id, { value: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      runQuery();
+                    }
+                  }}
                 />
               </div>
               <div className="col-md-1">
