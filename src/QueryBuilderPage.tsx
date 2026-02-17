@@ -50,6 +50,7 @@ type QueryBuilderState = {
   whereClauses: WhereClause[];
   orderField: string;
   orderDirection: SortDirection;
+  groupByField: string;
   aggregation: Aggregation;
   aggregationField: string;
   builtQueries: string[];
@@ -86,6 +87,40 @@ function getNumberValue(value: PropertyValue) {
     return value.doubleValue;
   }
   return null;
+}
+
+function propertyValueToGroupKey(value: PropertyValue | undefined) {
+  if (value == null || "nullValue" in value) {
+    return "NULL";
+  }
+  if ("stringValue" in value) {
+    return value.stringValue;
+  }
+  if ("integerValue" in value) {
+    return value.integerValue;
+  }
+  if ("doubleValue" in value) {
+    return String(value.doubleValue);
+  }
+  if ("booleanValue" in value) {
+    return value.booleanValue ? "true" : "false";
+  }
+  if ("timestampValue" in value) {
+    return value.timestampValue;
+  }
+  if ("blobValue" in value) {
+    return value.blobValue;
+  }
+  if ("keyValue" in value) {
+    return JSON.stringify(value.keyValue);
+  }
+  if ("geoPointValue" in value) {
+    return `${value.geoPointValue.latitude ?? ""},${value.geoPointValue.longitude ?? ""}`;
+  }
+  if ("arrayValue" in value) {
+    return JSON.stringify(value.arrayValue.values || []);
+  }
+  return JSON.stringify(value.entityValue);
 }
 
 function calculateAggregation(
@@ -345,6 +380,9 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
   const [orderDirection, setOrderDirection] = React.useState<SortDirection>(
     persistedState?.orderDirection || "ASC",
   );
+  const [groupByField, setGroupByField] = React.useState(
+    persistedState?.groupByField || "",
+  );
   const [aggregation, setAggregation] = React.useState<Aggregation>(
     persistedState?.aggregation || "none",
   );
@@ -369,6 +407,7 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
       setWhereClauses([]);
       setOrderField("");
       setOrderDirection("ASC");
+      setGroupByField("");
       setAggregation("none");
       setAggregationField("");
       setBuiltQueries([]);
@@ -378,6 +417,7 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
     setWhereClauses(nextPersistedState.whereClauses || []);
     setOrderField(nextPersistedState.orderField || "");
     setOrderDirection(nextPersistedState.orderDirection || "ASC");
+    setGroupByField(nextPersistedState.groupByField || "");
     setAggregation(nextPersistedState.aggregation || "none");
     setAggregationField(nextPersistedState.aggregationField || "");
     setBuiltQueries(nextPersistedState.builtQueries || []);
@@ -389,6 +429,7 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
       whereClauses,
       orderField,
       orderDirection,
+      groupByField,
       aggregation,
       aggregationField,
       builtQueries,
@@ -400,6 +441,7 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
     whereClauses,
     orderField,
     orderDirection,
+    groupByField,
     aggregation,
     aggregationField,
     builtQueries,
@@ -418,6 +460,9 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
     if (orderField && !fields.allFields.includes(orderField)) {
       setOrderField("");
     }
+    if (groupByField && !fields.allFields.includes(groupByField)) {
+      setGroupByField("");
+    }
     if (aggregationField && !fields.numericFields.includes(aggregationField)) {
       setAggregationField("");
     }
@@ -428,7 +473,7 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
           : { ...clause, field: "" },
       ),
     );
-  }, [fields, orderField, aggregationField]);
+  }, [fields, orderField, groupByField, aggregationField]);
 
   const {
     data: queryResults,
@@ -440,6 +485,28 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
     () => calculateAggregation(aggregation, queryResults, aggregationField),
     [aggregation, queryResults, aggregationField],
   );
+  const groupedAggregationRows = React.useMemo(() => {
+    if (!queryResults || !groupByField) {
+      return [] as Array<{ group: string; rows: number; aggregation: number | null }>;
+    }
+    const groups = new Map<string, Entity[]>();
+    for (const entity of queryResults) {
+      const groupKey = propertyValueToGroupKey(entity.properties?.[groupByField]);
+      const items = groups.get(groupKey) || [];
+      items.push(entity);
+      groups.set(groupKey, items);
+    }
+    return Array.from(groups.entries())
+      .map(([group, entities]) => ({
+        group,
+        rows: entities.length,
+        aggregation:
+          aggregation === "none"
+            ? null
+            : calculateAggregation(aggregation, entities, aggregationField),
+      }))
+      .sort((a, b) => a.group.localeCompare(b.group));
+  }, [queryResults, groupByField, aggregation, aggregationField]);
 
   const addWhereClause = React.useCallback(() => {
     setWhereClauses((previous) => [
@@ -678,6 +745,23 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
               </select>
             </div>
           </div>
+          <div className="row g-2 align-items-center mt-2">
+            <div className="col-md-3 fw-bold">Group By (Frontend)</div>
+            <div className="col-md-4">
+              <select
+                className="form-select form-select-sm"
+                value={groupByField}
+                onChange={(e) => setGroupByField(e.target.value)}
+              >
+                <option value="">No grouping</option>
+                {(fields?.allFields || []).map((field) => (
+                  <option key={field} value={field}>
+                    {field}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div className="mt-3 d-flex gap-2">
             <button type="button" className="btn btn-primary" onClick={runQuery}>
@@ -717,6 +801,31 @@ export default function QueryBuilderPage({ namespace }: { namespace: string | nu
               ) : null}
             </div>
           </div>
+          {groupByField ? (
+            <div className="card mb-3">
+              <div className="card-header fw-bold">Grouped Results ({groupByField})</div>
+              <div className="table-responsive">
+                <table className="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th>Group</th>
+                      <th>Rows</th>
+                      {aggregation !== "none" ? <th>{aggregation.toUpperCase()}</th> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupedAggregationRows.map((row) => (
+                      <tr key={row.group}>
+                        <td>{row.group}</td>
+                        <td>{row.rows}</td>
+                        {aggregation !== "none" ? <td>{row.aggregation ?? "n/a"}</td> : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
           <EntitiesTable entities={queryResults} namespace={namespace} />
         </div>
       ) : null}
